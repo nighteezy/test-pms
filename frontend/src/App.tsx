@@ -1,25 +1,21 @@
-import { useState } from "react";
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import IssuesPage from "./pages/IssuesPage";
+import BoardsPage from "./pages/BoardsPage";
+import BoardPage from "./pages/BoardPage";
+import Header from "./components/Header/Header";
 
-function App() {
-  const [count, setCount] = useState(0);
-
+const App: React.FC = () => {
   return (
-    <>
-      <div></div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <Router>
+      <Header />
+      <Routes>
+        <Route path="/boards" element={<BoardsPage />} />
+        <Route path="/board/:id" element={<BoardPage />} />
+        <Route path="/issues" element={<IssuesPage />} />
+      </Routes>
+    </Router>
   );
-}
+};
 
 export default App;

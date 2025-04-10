@@ -1,4 +1,3 @@
-
 export interface GetUsersResponse {
   id: number;
   fullName: string;
@@ -6,6 +5,6 @@ export interface GetUsersResponse {
   avatarUrl: string;
   description: string;
   tasksCount: number; // Количество задач пользователя
-  teamId: number;     // ID команды
-  teamName: string;    // Название команды
+  teamId: number; // ID команды
+  teamName: string; // Название команды
 }

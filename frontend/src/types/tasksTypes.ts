@@ -1,13 +1,13 @@
 //типы, связанные с задачами
 
-import { AssigneeUserForTask } from './commonTypes';
+import { AssigneeUserForTask } from "./commonTypes";
 
 export interface TaskBase {
   id: number;
   title: string;
   description: string;
-  priority: 'Low' | 'Medium' | 'High';
-  status: 'Backlog' | 'InProgress' | 'Done';
+  priority: "Low" | "Medium" | "High";
+  status: "Backlog" | "InProgress" | "Done";
   assignee: AssigneeUserForTask;
   boardName: string;
 }
@@ -15,7 +15,7 @@ export interface TaskBase {
 export interface CreateTaskRequest {
   title: string;
   description: string;
-  priority: 'Low' | 'Medium' | 'High';
+  priority: "Low" | "Medium" | "High";
   boardId: number;
   assigneeId: number;
 }
@@ -24,19 +24,19 @@ export interface CreateTaskResponse {
   id: number;
 }
 
-export interface GetTaskByIDResponse extends TaskBase {}
+export type GetTaskByIDResponse = TaskBase;
 
 export interface GetTasksResponse extends TaskBase {
   boardId: number;
 }
 
-export interface GetUserTasksResponse extends Omit<TaskBase, 'boardName'> {}
+export type GetUserTasksResponse = Omit<TaskBase, "boardName">;
 
 export interface UpdateTaskRequest {
   title: string; // Длина от 1 до 100 символов
   description: string; // Длина от 1 до 500 символов
-  priority: 'Low' | 'Medium' | 'High'; // Перечисление приоритетов
-  status: 'Backlog' | 'InProgress' | 'Done'; // Статус задачи
+  priority: "Low" | "Medium" | "High"; // Перечисление приоритетов
+  status: "Backlog" | "InProgress" | "Done"; // Статус задачи
   assigneeId: number; // ID исполнителя
 }
 
@@ -45,7 +45,7 @@ export interface UpdateTaskResponse {
 }
 
 export interface UpdateTaskStatusRequest {
-  status: 'Backlog' | 'InProgress' | 'Done'; // Новый статус задачи
+  status: "Backlog" | "InProgress" | "Done"; // Новый статус задачи
 }
 
 export interface UpdateTaskStatusResponse {
