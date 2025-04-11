@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { AppBar, Toolbar, Typography, Button } from '@mui/material';
-import TaskFormModal from '../TaskFormModal/TaskFormModal';
-
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
+import { AppBar, Toolbar, Typography, Button } from "@mui/material";
+import TaskFormModal from "../TaskFormModal/TaskFormModal";
 
 const Header: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -15,15 +14,15 @@ const Header: React.FC = () => {
     setIsModalOpen(false);
   };
 
-  const handleSubmit = (data: any) => {
-    console.log('Данные задачи:', data);
+  const handleSubmit = (data: unknown) => {
+    console.log("Данные задачи:", data);
     // Здесь можно вызвать API для создания задачи
   };
 
   return (
     <>
       {/* Хедер */}
-      <AppBar position="static" sx={{ marginBottom: '20px' }}>
+      <AppBar position="static" sx={{ marginBottom: "20px" }}>
         <Toolbar>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Project Management System
@@ -45,6 +44,7 @@ const Header: React.FC = () => {
         open={isModalOpen}
         onClose={handleCloseModal}
         onSubmit={handleSubmit}
+        mode={"create"}
       />
     </>
   );
