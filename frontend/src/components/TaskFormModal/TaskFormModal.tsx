@@ -153,7 +153,6 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
         {/* Выбор статуса */}
         <Select
           name="status"
-          value={formData.status}
           onChange={handleSelectChange}
           fullWidth
           variant="standard"
@@ -187,7 +186,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
         {isCreateMode && (
           <Select
             name="boardId"
-            value={formData.boardId}
+            
             onChange={(e: SelectChangeEvent<number>) =>
               setFormData((prevData) => ({
                 ...prevData,

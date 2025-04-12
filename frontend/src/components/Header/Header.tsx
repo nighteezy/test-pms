@@ -27,11 +27,11 @@ const Header: React.FC = () => {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Project Management System
           </Typography>
-          <Button color="inherit" component={Link} to="/boards">
-            Доски
-          </Button>
           <Button color="inherit" component={Link} to="/issues">
-            Задачи
+            Все задачи
+          </Button>
+          <Button color="inherit" component={Link} to="/boards">
+            Проекты
           </Button>
           <Button color="inherit" onClick={handleOpenModal}>
             Создать задачу

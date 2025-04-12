@@ -18,3 +18,9 @@ export interface GetTasksOnBoardResponse {
   status: "Backlog" | "InProgress" | "Done";
   assignee: AssigneeUserForTask;
 }
+
+export interface BoardState {
+  Backlog: GetTasksOnBoardResponse[];
+  InProgress: GetTasksOnBoardResponse[];
+  Done: GetTasksOnBoardResponse[];
+}
