@@ -1,230 +1,290 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { GetTasksOnBoardResponse, UpdateTaskRequest, CreateTaskRequest, UpdateTaskStatusRequest } from '../types';
-import Column from '../components/Column/Column';
-import TaskFormModal from '../components/TaskFormModal/TaskFormModal';
+import { updateTaskStatus, updateTask, getTaskById } from '../api/tasksApi';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+  DragOverEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { Box, Typography, Paper, List } from '@mui/material';
 import { fetchTasksOnBoard } from '../api/boardsApi';
-import { createIssue, updateTask, updateTaskStatus } from '../api/tasksApi';
 
-interface BoardState {
-  Backlog: GetTasksOnBoardResponse[];
-  InProgress: GetTasksOnBoardResponse[];
-  Done: GetTasksOnBoardResponse[];
-}
+import {
+  BoardState,
+  GetTasksResponse,
+  UpdateTaskRequest,
+  CreateTaskRequest
+} from '../types';
+import TaskFormModal from '../components/TaskFormModal/TaskFormModal';
+import { SortableTaskItem } from '../components/SortableTaskItem/SortableTaskItem';
 
 const BoardPage: React.FC = () => {
-  const { id: boardId } = useParams<{ id: string }>();
+  const { id } = useParams<{ id: string }>();
   const [tasks, setTasks] = useState<BoardState>({
     Backlog: [],
     InProgress: [],
     Done: [],
   });
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [currentTask, setCurrentTask] = useState<GetTasksOnBoardResponse | null>(null);
+  const [selectedTask, setSelectedTask] = useState<GetTasksResponse | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   useEffect(() => {
     const loadTasks = async () => {
       try {
-        if (boardId) {
-          const tasksData = await fetchTasksOnBoard(Number(boardId));
-          const groupedTasks: BoardState = {
-            Backlog: tasksData.filter(task => task.status === 'Backlog'),
-            InProgress: tasksData.filter(task => task.status === 'InProgress'),
-            Done: tasksData.filter(task => task.status === 'Done'),
-          };
-          setTasks(groupedTasks);
+        if (!id) {
+          setError('ID доски не найден');
+          return;
         }
+
+        const boardId = Number(id);
+        const tasksData = await fetchTasksOnBoard(boardId);
+
+        // Преобразуем задачи к полному типу GetTasksResponse
+        const transformedTasks: GetTasksResponse[] = tasksData.map(task => ({
+          ...task,
+          boardId,
+          boardName: `Доска ${boardId}`
+        }));
+
+        const groupedTasks: BoardState = {
+          Backlog: transformedTasks.filter((task) => task.status === 'Backlog'),
+          InProgress: transformedTasks.filter((task) => task.status === 'InProgress'),
+          Done: transformedTasks.filter((task) => task.status === 'Done'),
+        };
+
+        setTasks(groupedTasks);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Ошибка при загрузке задач');
+        const errorMessage =
+          err instanceof Error ? err.message : 'Ошибка при загрузке задач';
+        setError(errorMessage);
+        console.error('Ошибка загрузки задач:', err);
       } finally {
         setLoading(false);
       }
     };
 
     loadTasks();
-  }, [boardId]);
+  }, [id]);
 
-  const handleEditTask = (task: GetTasksOnBoardResponse) => {
-    setCurrentTask(task);
-    setIsModalOpen(true);
-  };
-
-  const handleSaveTask = async (data: CreateTaskRequest | UpdateTaskRequest) => {
+  const handleTaskClick = async (task: GetTasksResponse) => {
     try {
-      setLoading(true);
-      
-      if (currentTask) {
-        // Редактирование
-        const updateData: UpdateTaskRequest = {
-          title: data.title,
-          description: data.description,
-          priority: data.priority,
-          status: (data as UpdateTaskRequest).status || currentTask.status,
-          assigneeId: data.assigneeId
-        };
-
-        await updateTask(currentTask.id, updateData);
-        
-        setTasks(prev => {
-          const newState = { ...prev };
-          Object.keys(newState).forEach(key => {
-            newState[key as keyof BoardState] = newState[key as keyof BoardState]
-              .filter(t => t.id !== currentTask.id);
-          });
-          
-          newState[updateData.status] = [
-            ...newState[updateData.status],
-            {
-              ...currentTask,
-              ...updateData,
-              assignee: {
-                ...currentTask.assignee,
-                id: updateData.assigneeId
-              }
-            }
-          ];
-          
-          return newState;
-        });
-      } else {
-        // Создание
-        const createData: CreateTaskRequest = {
-          title: data.title,
-          description: data.description,
-          priority: data.priority,
-          boardId: Number(boardId),
-          assigneeId: data.assigneeId
-        };
-
-        const newTask = await createIssue(createData);
-        
-        setTasks(prev => ({
-          ...prev,
-          [newTask.status]: [...prev[newTask.status as keyof BoardState], newTask]
-        }));
-      }
-      
-      setIsModalOpen(false);
-      setCurrentTask(null);
+      // Загружаем полные данные задачи
+      const taskData = await getTaskById(task.id);
+      setSelectedTask({
+        ...taskData,
+        boardId: task.boardId,
+        boardName: task.boardName
+      });
+      setModalOpen(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка при сохранении задачи');
-    } finally {
-      setLoading(false);
+      console.error('Ошибка при загрузке данных задачи:', err);
     }
   };
 
-  const moveTaskWithinColumn = (fromIndex: number, toIndex: number, status: keyof BoardState) => {
-    setTasks(prev => {
-      const newTasks = { ...prev };
-      const columnTasks = [...newTasks[status]];
-      const [movedTask] = columnTasks.splice(fromIndex, 1);
-      columnTasks.splice(toIndex, 0, movedTask);
-      
-      return {
-        ...newTasks,
-        [status]: columnTasks
-      };
-    });
-  };
-
-  const moveTaskBetweenColumns = async (
-    sourceStatus: keyof BoardState,
-    destinationStatus: keyof BoardState,
-    dragIndex: number,
-    hoverIndex: number
-  ) => {
-    if (sourceStatus === destinationStatus) return;
-
-    const taskToMove = tasks[sourceStatus][dragIndex];
-    const updateData: UpdateTaskStatusRequest = { status: destinationStatus };
-    
+  const handleSaveTask = async (data: UpdateTaskRequest | CreateTaskRequest) => {
     try {
-      // Оптимистичное обновление
-      setTasks(prev => {
-        const newTasks = { ...prev };
-        const sourceTasks = [...newTasks[sourceStatus]];
-        const destinationTasks = [...newTasks[destinationStatus]];
+      if (!selectedTask) return;
 
-        const [movedTask] = sourceTasks.splice(dragIndex, 1);
-        destinationTasks.splice(hoverIndex, 0, {
-          ...movedTask,
-          status: destinationStatus
+      // В режиме редактирования используем UpdateTaskRequest
+      const updateData: UpdateTaskRequest = {
+        title: data.title,
+        description: data.description,
+        priority: data.priority,
+        status: (data as UpdateTaskRequest).status || selectedTask.status,
+        assigneeId: data.assigneeId
+      };
+
+      await updateTask(selectedTask.id, updateData);
+
+      // Обновляем локальное состояние
+      setTasks(prevTasks => {
+        const newTasks = { ...prevTasks };
+        Object.keys(newTasks).forEach(status => {
+          newTasks[status as keyof BoardState] = newTasks[status as keyof BoardState].map(task => {
+            if (task.id === selectedTask.id) {
+              return { 
+                ...task, 
+                title: updateData.title,
+                description: updateData.description,
+                priority: updateData.priority,
+                status: updateData.status,
+                assignee: {
+                  ...task.assignee,
+                  id: updateData.assigneeId
+                }
+              };
+            }
+            return task;
+          });
         });
-
-        return {
-          ...newTasks,
-          [sourceStatus]: sourceTasks,
-          [destinationStatus]: destinationTasks
-        };
+        return newTasks;
       });
 
-      await updateTaskStatus(taskToMove.id, updateData);
+      setModalOpen(false);
     } catch (err) {
-      // Откат при ошибке
-      setTasks(prev => prev);
-      setError(err instanceof Error ? err.message : 'Ошибка при обновлении статуса');
+      console.error('Ошибка при обновлении задачи:', err);
     }
   };
 
-  if (loading) return <div>Загрузка...</div>;
-  if (error) return <div style={{ color: 'red' }}>{error}</div>;
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) return;
+
+    const activeContainer = Object.keys(tasks).find((key) =>
+      tasks[key as keyof BoardState].some((task) => task.id === active.id)
+    ) as keyof BoardState | undefined;
+
+    const overContainer = Object.keys(tasks).find((key) =>
+      tasks[key as keyof BoardState].some((task) => task.id === over.id)
+    ) as keyof BoardState | undefined;
+
+    if (activeContainer && overContainer && activeContainer === overContainer) {
+      const activeIndex = tasks[activeContainer].findIndex(
+        (task) => task.id === active.id
+      );
+      const overIndex = tasks[overContainer].findIndex(
+        (task) => task.id === over.id
+      );
+
+      setTasks((prevTasks) => ({
+        ...prevTasks,
+        [activeContainer]: arrayMove(
+          prevTasks[activeContainer],
+          activeIndex,
+          overIndex
+        ),
+      }));
+    }
+  };
+
+  const handleDragOver = async (event: DragOverEvent) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) return;
+
+    const activeContainer = Object.keys(tasks).find((key) =>
+      tasks[key as keyof BoardState].some((task) => task.id === active.id)
+    ) as keyof BoardState | undefined;
+
+    const overContainer = Object.keys(tasks).find((key) =>
+      tasks[key as keyof BoardState].some((task) => task.id === over.id)
+    ) as keyof BoardState | undefined;
+
+    if (!activeContainer || !overContainer || activeContainer === overContainer) {
+      return;
+    }
+
+    const activeIndex = tasks[activeContainer].findIndex(
+      (task) => task.id === active.id
+    );
+    const activeTask = tasks[activeContainer][activeIndex];
+
+    try {
+      await updateTaskStatus(activeTask.id, { status: overContainer });
+
+      setTasks((prevTasks) => {
+        const newTasks = { ...prevTasks };
+        newTasks[activeContainer] = newTasks[activeContainer].filter(
+          (task) => task.id !== active.id
+        );
+        newTasks[overContainer] = [
+          ...newTasks[overContainer],
+          { 
+            ...activeTask, 
+            status: overContainer 
+          } as GetTasksResponse,
+        ];
+        return newTasks;
+      });
+    } catch (err) {
+      console.error('Ошибка при обновлении статуса задачи:', err);
+    }
+  };
+
+  if (loading) {
+    return <div>Загрузка...</div>;
+  }
+
+  if (error) {
+    return <div>{error}</div>;
+  }
 
   return (
-    <div>
-      <h1>Проекты</h1>
-      <button 
-        onClick={() => {
-          setCurrentTask(null);
-          setIsModalOpen(true);
-        }}
-        style={{ marginBottom: '16px' }}
-      >
-        Создать задачу
-      </button>
+    <Box sx={{ padding: '24px' }}>
+      <Typography variant="h4" component="h1" gutterBottom>
+        Доска #{id}
+      </Typography>
 
-      <div style={{ display: 'flex', gap: '16px' }}>
-        <Column
-          title="Backlog"
-          tasks={tasks.Backlog}
-          status="Backlog"
-          onMoveTaskWithinColumn={(fromIndex, toIndex) => 
-            moveTaskWithinColumn(fromIndex, toIndex, 'Backlog')
-          }
-          onMoveTaskBetweenColumns={moveTaskBetweenColumns}
-          onEditTask={handleEditTask}
-        />
-        <Column
-          title="In Progress"
-          tasks={tasks.InProgress}
-          status="InProgress"
-          onMoveTaskWithinColumn={(fromIndex, toIndex) => 
-            moveTaskWithinColumn(fromIndex, toIndex, 'InProgress')
-          }
-          onMoveTaskBetweenColumns={moveTaskBetweenColumns}
-          onEditTask={handleEditTask}
-        />
-        <Column
-          title="Done"
-          tasks={tasks.Done}
-          status="Done"
-          onMoveTaskWithinColumn={(fromIndex, toIndex) => 
-            moveTaskWithinColumn(fromIndex, toIndex, 'Done')
-          }
-          onMoveTaskBetweenColumns={moveTaskBetweenColumns}
-          onEditTask={handleEditTask}
-        />
-      </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+        onDragOver={handleDragOver}
+      >
+        <Box display="flex" gap={3}>
+          {Object.keys(tasks).map((status) => (
+            <SortableContext
+              key={status}
+              items={tasks[status as keyof BoardState].map((task) => task.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <Paper
+                sx={{
+                  width: '30%',
+                  padding: '16px',
+                  minHeight: '200px',
+                  backgroundColor: '#f9f9f9',
+                  borderRadius: '8px',
+                }}
+              >
+                <Typography variant="h5" gutterBottom>
+                  {status}
+                </Typography>
+                <List>
+                  {tasks[status as keyof BoardState].map((task) => (
+                    <SortableTaskItem 
+                      key={task.id} 
+                      id={task.id} 
+                      task={task}
+                      onClick={() => handleTaskClick(task)}
+                    />
+                  ))}
+                </List>
+              </Paper>
+            </SortableContext>
+          ))}
+        </Box>
+      </DndContext>
 
       <TaskFormModal
-        open={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
         onSave={handleSaveTask}
-        task={currentTask || null}
-        mode={currentTask ? 'edit' : 'create'}
+        task={selectedTask}
+        mode="edit"
       />
-    </div>
+    </Box>
   );
 };
 
