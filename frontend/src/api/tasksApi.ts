@@ -11,8 +11,13 @@ import {
 } from "../types";
 
 export const fetchIssues = async (): Promise<GetTasksResponse[]> => {
-  const response = await apiClient.get<GetTasksResponse[]>("/tasks");
-  return response.data;
+  try {
+    const response = await apiClient.get<{ data: GetTasksResponse[] }>("/tasks");
+    return response.data.data; // Возвращаем массив задач из поля `data`
+  } catch (error) {
+    console.error('Ошибка при загрузке задач:', error);
+    throw new Error('Не удалось загрузить задачи');
+  }
 };
 
 export const createIssue = async (

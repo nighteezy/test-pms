@@ -1,213 +1,168 @@
-// src/components/TaskFormModal.tsx
-
-import React, { useState } from "react";
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogActions,
   TextField,
   Select,
   MenuItem,
-  DialogActions,
   Button,
-} from "@mui/material";
-import { SelectChangeEvent } from "@mui/material/Select";
-import { z } from "zod";
-import { CreateTaskRequest, UpdateTaskRequest } from "../../types";
+} from '@mui/material';
+import { GetTasksResponse, UpdateTaskRequest, CreateTaskRequest } from '../../types';
 
-type TaskFormData = CreateTaskRequest | UpdateTaskRequest;
+// Объединенный тип для состояния формы
+type TaskFormData = CreateTaskRequest & Partial<UpdateTaskRequest>;
 
 interface TaskFormModalProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: TaskFormData) => void;
-  mode: "create" | "edit"; // Режим: создание или редактирование
-  defaultBoardId?: number; // ID доски для режима создания
-  isBoardLocked?: boolean; // Флаг, указывающий, заблокировано ли поле выбора доски
-  task?: UpdateTaskRequest; // Данные задачи для режима редактирования
+  onSave: (data: CreateTaskRequest | UpdateTaskRequest) => void;
+  task?: GetTasksResponse | null; // Предзаполненные данные для редактирования
+  mode: 'create' | 'edit'; // Режим: создание или редактирование
+  boardLink?: string; // Ссылка на доску (если вызвано со страницы всех задач)
 }
-
-// Схема валидации с помощью Zod
-const createTaskSchema = z.object({
-  title: z.string().min(1, "Название задачи обязательно"),
-  description: z.string().optional(),
-  priority: z.enum(["Low", "Medium", "High"]),
-  status: z.enum(["Backlog", "InProgress", "Done"]), // Обязательное поле
-  assigneeId: z.number().min(0, "Выберите исполнителя"),
-  boardId: z.number().min(1, "Выберите доску"), // Обязательное поле
-});
-
-const updateTaskSchema = createTaskSchema.partial({ boardId: true });
 
 const TaskFormModal: React.FC<TaskFormModalProps> = ({
   open,
   onClose,
-  onSubmit,
-  mode,
-  defaultBoardId,
-  isBoardLocked = false,
+  onSave,
   task,
+  mode,
+  boardLink,
 }) => {
-  // Инициализация состояния
-  const [formData, setFormData] = useState<TaskFormData>(
-    mode === "edit" && task
-      ? task
-      : {
-          title: "",
-          description: "",
-          priority: "Low",
-          status: "Backlog",
-          boardId: defaultBoardId || 0,
-          assigneeId: 0,
-        }
-  );
+  // Инициализация состояния формы с предзаполненными данными
+  const [formData, setFormData] = useState<TaskFormData>({
+    title: '',
+    description: '',
+    priority: 'Low',
+    status: undefined,
+    assigneeId: 1,
+    boardId: 1,
+  });
 
-  // Флаги для режимов
-  const isCreateMode = mode === "create";
+  // Обновление состояния formData при изменении task
+  useEffect(() => {
+    if (task) {
+      setFormData({
+        title: task.title || '',
+        description: task.description || '',
+        priority: task.priority || 'Low',
+        status: task.status || undefined,
+        assigneeId: task.assignee.id || 1,
+        boardId: task.boardId || 1,
+      });
+    } else {
+      setFormData({
+        title: '',
+        description: '',
+        priority: 'Low',
+        status: undefined,
+        assigneeId: 1,
+        boardId: 1,
+      });
+    }
+  }, [task]);
 
-  // Обработчик для текстовых полей
-  const handleInputChange = (
+  // Обновление полей формы
+  const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setFormData((prevData) => ({
-      ...prevData,
-      [name]: value,
-    }));
+    setFormData({ ...formData, [name]: value });
   };
 
-  // Обработчик для выпадающих списков
-  const handleSelectChange = (e: SelectChangeEvent<string>) => {
-    const { name, value } = e.target;
-    setFormData((prevData) => ({
-      ...prevData,
-      [name]: value,
-    }));
-  };
-
-  // Обработчик отправки формы
-  const handleSubmit = async () => {
-    try {
-      if (isCreateMode) {
-        createTaskSchema.parse(formData); // Валидация для создания
-      } else {
-        updateTaskSchema.parse(formData); // Валидация для редактирования
-      }
-
-      onSubmit(formData);
-      onClose();
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        alert(error.errors.map((err) => err.message).join("\n"));
-      }
-    }
+  // Обработка сохранения
+  const handleSave = () => {
+    onSave(formData);
+    onClose();
   };
 
   return (
-    <Dialog open={open} onClose={onClose}>
-      {/* Заголовок зависит от режима */}
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>
-        {isCreateMode ? "Создание задачи" : "Редактирование задачи"}
+        {mode === 'create' ? 'Создание задачи' : 'Редактирование задачи'}
       </DialogTitle>
       <DialogContent>
-        {/* Поле "Название задачи" */}
         <TextField
           autoFocus
           margin="dense"
-          label="Название задачи"
+          label="Название"
+          fullWidth
           name="title"
           value={formData.title}
-          onChange={handleInputChange}
-          fullWidth
-          variant="standard"
-          required
+          onChange={handleChange}
         />
-
-        {/* Поле "Описание задачи" */}
         <TextField
           margin="dense"
-          label="Описание задачи"
-          name="description"
-          value={formData.description}
-          onChange={handleInputChange}
+          label="Описание"
           fullWidth
           multiline
           rows={4}
-          variant="standard"
+          name="description"
+          value={formData.description}
+          onChange={handleChange}
         />
-
-        {/* Выбор приоритета */}
         <Select
+          margin="dense"
+          fullWidth
           name="priority"
           value={formData.priority}
-          onChange={handleSelectChange}
-          fullWidth
-          variant="standard"
-          sx={{ marginTop: "10px" }}
+          onChange={(e) =>
+            setFormData({ ...formData, priority: e.target.value as 'Low' | 'Medium' | 'High' })
+          }
         >
-          <MenuItem value="Low">Низкий</MenuItem>
-          <MenuItem value="Medium">Средний</MenuItem>
-          <MenuItem value="High">Высокий</MenuItem>
+          <MenuItem value="Low">Low</MenuItem>
+          <MenuItem value="Medium">Medium</MenuItem>
+          <MenuItem value="High">High</MenuItem>
         </Select>
-
-        {/* Выбор статуса */}
-        <Select
-          name="status"
-          onChange={handleSelectChange}
+        {mode === 'edit' && (
+          <Select
+            margin="dense"
+            fullWidth
+            name="status"
+            value={formData.status || 'Backlog'}
+            onChange={(e) =>
+              setFormData({
+                ...formData,
+                status: e.target.value as 'Backlog' | 'InProgress' | 'Done',
+              })
+            }
+          >
+            <MenuItem value="Backlog">Backlog</MenuItem>
+            <MenuItem value="InProgress">In Progress</MenuItem>
+            <MenuItem value="Done">Done</MenuItem>
+          </Select>
+        )}
+        <TextField
+          margin="dense"
+          label="ID исполнителя"
+          type="number"
           fullWidth
-          variant="standard"
-          sx={{ marginTop: "10px" }}
-        >
-          <MenuItem value="Backlog">Backlog</MenuItem>
-          <MenuItem value="InProgress">In Progress</MenuItem>
-          <MenuItem value="Done">Done</MenuItem>
-        </Select>
-
-        {/* Выбор исполнителя */}
-        <Select
           name="assigneeId"
           value={formData.assigneeId}
-          onChange={(e: SelectChangeEvent<number>) =>
-            setFormData((prevData) => ({
-              ...prevData,
-              assigneeId: Number(e.target.value),
-            }))
+          onChange={(e) =>
+            setFormData({ ...formData, assigneeId: Number(e.target.value) })
           }
-          fullWidth
-          variant="standard"
-          sx={{ marginTop: "10px" }}
-        >
-          <MenuItem value={0}>Не выбрано</MenuItem>
-          <MenuItem value={1}>Исполнитель 1</MenuItem>
-          <MenuItem value={2}>Исполнитель 2</MenuItem>
-        </Select>
-
-        {/* Выбор доски (только для режима создания) */}
-        {isCreateMode && (
-          <Select
-            name="boardId"
-            
-            onChange={(e: SelectChangeEvent<number>) =>
-              setFormData((prevData) => ({
-                ...prevData,
-                boardId: Number(e.target.value),
-              }))
-            }
+        />
+        {mode === 'edit' && boardLink && (
+          <Button
+            variant="contained"
+            color="primary"
             fullWidth
-            variant="standard"
-            disabled={isBoardLocked}
-            sx={{ marginTop: "10px" }}
+            style={{ marginTop: '16px' }}
+            onClick={() => window.location.href = boardLink}
           >
-            <MenuItem value={0}>Не выбрано</MenuItem>
-            <MenuItem value={1}>Доска 1</MenuItem>
-            <MenuItem value={2}>Доска 2</MenuItem>
-          </Select>
+            Перейти на доску
+          </Button>
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Отмена</Button>
-        <Button onClick={handleSubmit} variant="contained">
-          {isCreateMode ? "Создать" : "Сохранить"}
+        <Button onClick={onClose} color="secondary">
+          Отмена
+        </Button>
+        <Button onClick={handleSave} color="primary">
+          {mode === 'create' ? 'Создать' : 'Сохранить'}
         </Button>
       </DialogActions>
     </Dialog>

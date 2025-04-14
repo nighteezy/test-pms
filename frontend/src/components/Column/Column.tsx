@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { useDrop } from 'react-dnd';
 import TaskItem from '../TaskItem/TaskItem';
-import { GetTasksOnBoardResponse, BoardState } from '../../types';
+import { BoardState, GetTasksOnBoardResponse } from '../../types';
 
 interface ColumnProps {
   title: string;
@@ -29,15 +29,21 @@ const Column: React.FC<ColumnProps> = ({
 
   const [{ isOver }, drop] = useDrop({
     accept: 'TASK',
-    drop: (item: { id: number; index: number; status: keyof BoardState }) => {
-      const sourceStatus = item.status;
-      const destinationStatus = status;
-      const dragIndex = item.index;
-      const hoverIndex = tasks.length; // Добавляем в конец колонки
-
-      onMoveTaskBetweenColumns(sourceStatus, destinationStatus, dragIndex, hoverIndex);
+    drop: (item: { id: number; index: number; status: string }, monitor) => {
+      if (!monitor.didDrop()) {
+        const sourceStatus = item.status as keyof BoardState;
+        const dragIndex = item.index;
+        const hoverIndex = tasks.length;
+        onMoveTaskBetweenColumns(sourceStatus, status, dragIndex, hoverIndex);
+      }
     },
-    canDrop: (item) => item.status !== status,
+    hover: (item: { id: number; index: number; status: string }) => {
+      if (!ref.current || item.status === status) return;
+      const hoverIndex = tasks.length;
+      if (item.index === hoverIndex) return;
+      onMoveTaskBetweenColumns(item.status as keyof BoardState, status, item.index, hoverIndex);
+      item.index = hoverIndex;
+    },
     collect: (monitor) => ({
       isOver: monitor.isOver(),
     }),
@@ -45,42 +51,30 @@ const Column: React.FC<ColumnProps> = ({
 
   drop(ref);
 
-  const columnStyle = {
-    border: '1px solid #ccc',
-    padding: '8px',
-    width: '300px',
-    minHeight: '200px',
-    backgroundColor: isOver ? '#f0f0f0' : 'white',
-    transition: 'background-color 0.2s ease',
-  };
-
   return (
-    <div ref={ref} style={columnStyle}>
-      <h3>{title}</h3>
-      <div style={{ minHeight: '50px' }}>
-        {tasks.length > 0 ? (
-          tasks.map((task, index) => (
-            <TaskItem
-              key={task.id}
-              task={task}
-              index={index}
-              status={status}
-              moveTaskWithinColumn={onMoveTaskWithinColumn}
-              onEditTask={onEditTask}
-            />
-          ))
-        ) : (
-          <div style={{
-            padding: '16px',
-            textAlign: 'center',
-            color: '#999',
-            border: '2px dashed #ddd',
-            borderRadius: '4px',
-            margin: '8px 0'
-          }}>
-            Перетащите задачи сюда
-          </div>
-        )}
+    <div 
+      ref={ref}
+      style={{
+        border: '1px solid #ccc',
+        padding: '16px',
+        width: '300px',
+        minHeight: '400px',
+        backgroundColor: isOver ? '#f5f5f5' : 'white',
+        borderRadius: '4px',
+      }}
+    >
+      <h3 style={{ textAlign: 'center' }}>{title}</h3>
+      <div style={{ marginTop: '16px' }}>
+        {tasks.map((task, index) => (
+          <TaskItem
+            key={task.id}
+            task={task}
+            index={index}
+            status={status}
+            onEditTask={onEditTask}
+            moveTaskWithinColumn={onMoveTaskWithinColumn}
+          />
+        ))}
       </div>
     </div>
   );
