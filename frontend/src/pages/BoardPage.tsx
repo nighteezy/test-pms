@@ -4,7 +4,6 @@ import { GetTasksOnBoardResponse } from '../types';
 import { fetchTasksOnBoard } from '../api/boardsApi';
 import Column from '../components/Column/Column';
 
-
 interface BoardState {
   Backlog: GetTasksOnBoardResponse[];
   InProgress: GetTasksOnBoardResponse[];
@@ -22,37 +21,38 @@ const BoardPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [, setEditingTask] = useState<GetTasksOnBoardResponse | null>(null);
 
+  // Сохранение состояния в localStorage
+  const saveBoardState = (boardState: BoardState) => {
+    if (id) {
+      localStorage.setItem(`board-${id}`, JSON.stringify(boardState));
+    }
+  };
+
   // Загрузка задач для доски
   useEffect(() => {
     const loadTasks = async () => {
       try {
         if (id) {
+          // Пытаемся загрузить из localStorage
+          const savedState = localStorage.getItem(`board-${id}`);
+          
+          if (savedState) {
+            setTasks(JSON.parse(savedState));
+            setLoading(false);
+            return;
+          }
+
+          // Если в localStorage нет, загружаем с сервера
           const tasksData = await fetchTasksOnBoard(Number(id));
           const groupedTasks: BoardState = {
-            Backlog: [],
-            InProgress: [],
-            Done: [],
+            Backlog: tasksData.filter(task => task.status === 'Backlog'),
+            InProgress: tasksData.filter(task => task.status === 'InProgress'),
+            Done: tasksData.filter(task => task.status === 'Done'),
           };
 
-          tasksData.forEach((task) => {
-            switch (task.status) {
-              case 'Backlog':
-                groupedTasks.Backlog.push(task);
-                break;
-              case 'InProgress':
-                groupedTasks.InProgress.push(task);
-                break;
-              case 'Done':
-                groupedTasks.Done.push(task);
-                break;
-              default:
-                console.error(`Unknown task status: ${task.status}`);
-            }
-          });
-
           setTasks(groupedTasks);
+          saveBoardState(groupedTasks);
         }
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (error) {
         setError('Ошибка при загрузке задач');
       } finally {
@@ -66,30 +66,24 @@ const BoardPage: React.FC = () => {
   // Обработка перемещения задач внутри колонки
   const moveTaskWithinColumn = (status: keyof BoardState, dragIndex: number, hoverIndex: number) => {
     setTasks((prevTasks) => {
-      const sourceTasks = [...prevTasks[status]];
-  
-      // Проверяем, что индексы находятся в допустимых пределах
-      if (dragIndex < 0 || dragIndex >= sourceTasks.length || hoverIndex < 0 || hoverIndex > sourceTasks.length) {
-        console.error(`Invalid drag or hover index: dragIndex=${dragIndex}, hoverIndex=${hoverIndex}`);
+      const newTasks = {
+        ...prevTasks,
+        [status]: [...prevTasks[status]]
+      };
+      
+      // Проверка валидности индексов
+      if (dragIndex < 0 || dragIndex >= newTasks[status].length || 
+          hoverIndex < 0 || hoverIndex > newTasks[status].length) {
         return prevTasks;
       }
-  
-      // Удаляем задачу из исходной позиции
-      const [movedTask] = sourceTasks.splice(dragIndex, 1);
-  
-      // Вставляем задачу в новую позицию
-      sourceTasks.splice(hoverIndex, 0, movedTask);
-  
-      // Возвращаем обновленное состояние
-      return {
-        ...prevTasks,
-        [status]: sourceTasks,
-      };
+
+      const [movedTask] = newTasks[status].splice(dragIndex, 1);
+      newTasks[status].splice(hoverIndex, 0, movedTask);
+      
+      saveBoardState(newTasks);
+      return newTasks;
     });
   };
-  useEffect(() => {
-    console.log('Current tasks state:', tasks);
-  }, [tasks]);
 
   // Обработка перемещения задач между колонками
   const moveTaskBetweenColumns = (
@@ -99,59 +93,60 @@ const BoardPage: React.FC = () => {
     hoverIndex: number
   ) => {
     setTasks((prevTasks) => {
-      // Если статусы совпадают, используем moveTaskWithinColumn вместо этого
       if (sourceStatus === destinationStatus) {
         return prevTasks;
       }
-  
-      // Создаем копии массивов задач
-      const sourceTasks = [...prevTasks[sourceStatus]];
-      const destinationTasks = [...prevTasks[destinationStatus]];
-  
-      // Проверяем индексы на валидность
-      if (dragIndex < 0 || dragIndex >= sourceTasks.length) {
-        console.error(`Invalid drag index: ${dragIndex}`);
+
+      const newTasks = { ...prevTasks };
+      const sourceTasks = [...newTasks[sourceStatus]];
+      const destinationTasks = [...newTasks[destinationStatus]];
+
+      // Проверка валидности индексов
+      if (dragIndex < 0 || dragIndex >= sourceTasks.length || 
+          hoverIndex < 0 || hoverIndex > destinationTasks.length) {
         return prevTasks;
       }
-  
-      if (hoverIndex < 0 || hoverIndex > destinationTasks.length) {
-        console.error(`Invalid hover index: ${hoverIndex}`);
-        return prevTasks;
-      }
-  
-      // Извлекаем задачу из исходной колонки
+
       const [movedTask] = sourceTasks.splice(dragIndex, 1);
-      
-      // Обновляем статус задачи
       const updatedTask = {
         ...movedTask,
         status: destinationStatus
       };
-  
-      // Вставляем задачу в целевую колонку
+
       destinationTasks.splice(hoverIndex, 0, updatedTask);
-  
-      // Возвращаем обновленное состояние
-      return {
-        ...prevTasks,
+
+      const updatedState = {
+        ...newTasks,
         [sourceStatus]: sourceTasks,
         [destinationStatus]: destinationTasks
       };
+
+      saveBoardState(updatedState);
+      return updatedState;
     });
   };
 
-  // Сохранение черновика задачи
-  // const saveDraft = (task: GetTasksOnBoardResponse) => {
-  //   if (!task) {
-  //     console.error('Cannot save draft: task is undefined');
-  //     return;
-  //   }
-  //   localStorage.setItem(`draft-task-${task.id}`, JSON.stringify(task));
-  // };
+  // Сброс доски к первоначальному состоянию
+  const resetBoard = async () => {
+    if (!id) return;
+    
+    try {
+      setLoading(true);
+      localStorage.removeItem(`board-${id}`);
+      const tasksData = await fetchTasksOnBoard(Number(id));
+      
+      const groupedTasks: BoardState = {
+        Backlog: tasksData.filter(task => task.status === 'Backlog'),
+        InProgress: tasksData.filter(task => task.status === 'InProgress'),
+        Done: tasksData.filter(task => task.status === 'Done'),
+      };
 
-  // Открытие модального окна для редактирования задачи
-  const handleEditTask = (task: GetTasksOnBoardResponse) => {
-    setEditingTask(task);
+      setTasks(groupedTasks);
+    } catch (error) {
+      setError('Ошибка при сбросе доски');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) {
@@ -165,9 +160,18 @@ const BoardPage: React.FC = () => {
   return (
     <div>
       <h1>Проекты</h1>
-      <button onClick={() => setEditingTask({} as GetTasksOnBoardResponse)}>Создать задачу</button>
+      <div style={{ marginBottom: '16px' }}>
+        <button 
+          onClick={() => setEditingTask({} as GetTasksOnBoardResponse)}
+          style={{ marginRight: '8px' }}
+        >
+          Создать задачу
+        </button>
+        <button onClick={resetBoard} style={{ backgroundColor: '#ffcccc' }}>
+          Сбросить доску
+        </button>
+      </div>
 
-      {/* Список задач */}
       <div style={{ display: 'flex', gap: '16px' }}>
         <Column
           title="Backlog"
@@ -200,29 +204,6 @@ const BoardPage: React.FC = () => {
           onEditTask={handleEditTask}
         />
       </div>
-
-      {/* Модальное окно для редактирования задачи 
-      {editingTask && (
-        <TaskModal
-          task={editingTask}
-          onSave={(updatedTask) => {
-            setTasks((prevTasks) => {
-              const statusKey = updatedTask.status as keyof BoardState;
-              const updatedTasks = prevTasks[statusKey].map((t) =>
-                t.id === updatedTask.id ? updatedTask : t
-              );
-
-              return {
-                ...prevTasks,
-                [statusKey]: updatedTasks,
-              };
-            });
-            setEditingTask(null);
-          }}
-          onClose={() => setEditingTask(null)}
-        />
-      )}
-        */}
     </div>
   );
 };

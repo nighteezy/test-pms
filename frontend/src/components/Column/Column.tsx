@@ -27,35 +27,60 @@ const Column: React.FC<ColumnProps> = ({
 }) => {
   const ref = useRef<HTMLDivElement>(null);
 
-  const [, drop] = useDrop({
+  const [{ isOver }, drop] = useDrop({
     accept: 'TASK',
-    drop(item: { id: number; index: number; status: string }, monitor) {
-      const didDrop = monitor.didDrop();
-      if (didDrop) return;
-
-      const sourceStatus = item.status as keyof BoardState;
+    drop: (item: { id: number; index: number; status: keyof BoardState }) => {
+      const sourceStatus = item.status;
       const destinationStatus = status;
+      const dragIndex = item.index;
+      const hoverIndex = tasks.length; // Добавляем в конец колонки
 
-      // Вызываем функцию для перемещения задачи между колонками
-      onMoveTaskBetweenColumns(sourceStatus, destinationStatus, item.index, 0);
+      onMoveTaskBetweenColumns(sourceStatus, destinationStatus, dragIndex, hoverIndex);
     },
+    canDrop: (item) => item.status !== status,
+    collect: (monitor) => ({
+      isOver: monitor.isOver(),
+    }),
   });
 
   drop(ref);
 
+  const columnStyle = {
+    border: '1px solid #ccc',
+    padding: '8px',
+    width: '300px',
+    minHeight: '200px',
+    backgroundColor: isOver ? '#f0f0f0' : 'white',
+    transition: 'background-color 0.2s ease',
+  };
+
   return (
-    <div ref={ref} style={{ border: '1px solid #ccc', padding: '8px', width: '300px' }}>
+    <div ref={ref} style={columnStyle}>
       <h3>{title}</h3>
-      <div>
-        {tasks.map((task, index) => (
-          <TaskItem
-            key={task.id} // Уникальный ключ
-            task={task}
-            index={index}
-            moveTaskWithinColumn={onMoveTaskWithinColumn}
-            onEditTask={onEditTask}
-          />
-        ))}
+      <div style={{ minHeight: '50px' }}>
+        {tasks.length > 0 ? (
+          tasks.map((task, index) => (
+            <TaskItem
+              key={task.id}
+              task={task}
+              index={index}
+              status={status}
+              moveTaskWithinColumn={onMoveTaskWithinColumn}
+              onEditTask={onEditTask}
+            />
+          ))
+        ) : (
+          <div style={{
+            padding: '16px',
+            textAlign: 'center',
+            color: '#999',
+            border: '2px dashed #ddd',
+            borderRadius: '4px',
+            margin: '8px 0'
+          }}>
+            Перетащите задачи сюда
+          </div>
+        )}
       </div>
     </div>
   );
